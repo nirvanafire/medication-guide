@@ -80,7 +80,6 @@ public class DocumentService {
             doc = documentRepository.save(doc);
 
             log.info("文档处理完成: {} chunks={}", drugName, allChunks.size());
-
         } catch (Exception e) {
             doc.setStatus(DrugDocument.DocumentStatus.FAILED);
             documentRepository.save(doc);

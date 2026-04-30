@@ -10,7 +10,6 @@ import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 
 import com.medication.config.RagConfig;
-import com.medication.util.HallucinationDetector;
 import com.medication.util.HallucinationDetector.HallucinationResult;
 
 import java.util.HashMap;

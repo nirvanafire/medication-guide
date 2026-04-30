@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn dependency:resolve)",
+      "WebSearch",
+      "Bash(mvn dependency:tree -Dverbose)",
+      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=g:dev.langchain4j+AND+a:langchain4j-spring-boot-starter&rows=5&wt=json\")",
+      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=g:dev.langchain4j+AND+a:langchain4j-spring-boot-starter&core=gav&rows=20&wt=json\")",
+      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=g:dev.langchain4j+AND+a:langchain4j&core=gav&rows=10&wt=json\")",
+      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=g:dev.langchain4j+AND+a:langchain4j&core=gav&rows=50&wt=json\")",
+      "Bash(curl -s \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j-spring-boot-starter/maven-metadata.xml\")",
+      "Bash(curl -s \"https://search.maven.org/solrsearch/select?q=langchain4j&rows=10&wt=json\")",
+      "Bash(curl -s \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j/maven-metadata.xml\")",
+      "Bash(mvn dependency:resolve -U)",
+      "Bash(curl -s \"https://oss.sonatype.org/content/repositories/snapshots/dev/langchain4j/langchain4j-spring-boot-starter/maven-metadata.xml\")",
+      "Bash(curl -sI \"https://oss.sonatype.org/content/repositories/releases/dev/langchain4j/langchain4j-spring-boot-starter/1.13.1/langchain4j-spring-boot-starter-1.13.1.jar\")",
+      "Bash(curl -sI \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j-spring-boot-starter/1.13.1-beta23/langchain4j-spring-boot-starter-1.13.1-beta23.jar\")",
+      "Bash(curl -sI \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j/1.13.1/langchain4j-1.13.1.jar\")",
+      "Bash(curl -sI \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j-spring-boot-starter/1.12.2/langchain4j-spring-boot-starter-1.12.2.jar\")",
+      "Bash(curl -sI https://repo1.maven.org/maven2/dev/langchain4j/langchain4j-spring-boot-starter/__TRACKED_VAR__/langchain4j-spring-boot-starter-__TRACKED_VAR__.jar)",
+      "Bash(curl -sI https://repo1.maven.org/maven2/dev/langchain4j/langchain4j/__TRACKED_VAR__/langchain4j-__TRACKED_VAR__.jar)",
+      "Bash(curl -sI \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j-spring-boot-starter/1.0.0-beta5/langchain4j-spring-boot-starter-1.0.0-beta5.jar\")",
+      "Bash(curl -sI \"https://repo1.maven.org/maven2/dev/langchain4j/langchain4j/1.0.0/langchain4j-1.0.0.jar\")",
+      "Bash(mvn compile *)",
+      "Bash(mvn dependency:tree)",
+      "Bash(jar tf *)",
+      "Bash(curl -s http://localhost:11434/api/tags)"
+    ]
+  }
+}
