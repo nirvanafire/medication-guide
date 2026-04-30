@@ -1,0 +1,146 @@
+# API Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drug-qa-api
+  namespace: drug-qa
+  labels:
+    app: drug-qa-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: drug-qa-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: drug-qa-api
+    spec:
+      containers:
+      - name: api
+        image: medication-guide:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: spring-profiles-active
+        - name: SPRING_AI_OLLAMA_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: ollama-url
+        - name: SPRING_DATA_REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: redis-host
+        - name: SPRING_DATA_REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: redis-port
+        - name: SPRING_AI_VECTORSTORE_MILVUS_URI
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: milvus-uri
+        - name: MYSQL_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: mysql-host
+        - name: MYSQL_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: mysql-port
+        - name: MYSQL_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: drug-qa-config
+              key: mysql-database
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              name: drug-qa-secret
+              key: mysql-user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: drug-qa-secret
+              key: mysql-password
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# API Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: drug-qa-api-service
+  namespace: drug-qa
+spec:
+  type: ClusterIP
+  selector:
+    app: drug-qa-api
+  ports:
+  - port: 80
+    targetPort: 8080
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: drug-qa-api-hpa
+  namespace: drug-qa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: drug-qa-api
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+  
+  jpa:
+    show-sql: false
+  
+  data:
+    redis:
+      lettuce:
+        pool:
+          max-active: 50
+
+logging:
+  level:
+    root: INFO
+    com.medication: INFO
+
+rate-limit:
+  requests-per-minute: 500

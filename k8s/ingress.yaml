@@ -1,0 +1,29 @@
+# Ingress Configuration (对外暴露)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: drug-qa-ingress
+  namespace: drug-qa
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - drug-qa.example.com
+    secretName: drug-qa-tls
+  rules:
+  - host: drug-qa.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: drug-qa-api-service
+            port:
+              number: 80

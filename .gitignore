@@ -1,0 +1,40 @@
+# Compiled
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Temp
+*.tmp
+*.temp
+
+# Build
+build/
+out/
+
+# Maven
+.m2/
+
+# Spring Boot
+spring-boot-devtools.properties
+
+# Application
+application-local.yml
+*.local.yml

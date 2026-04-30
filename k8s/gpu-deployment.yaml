@@ -1,0 +1,100 @@
+# GPU Node Deployment (vLLM/Ollama 推理服务)
+# 注意：需要在 GPU 节点上运行
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: drug-qa
+  labels:
+    app: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      # 指定调度到 GPU 节点 (如果有)
+      # nodeSelector:
+      #   gpu-type: nvidia-a100
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "4Gi"
+          limits:
+            cpu: "4000m"
+            memory: "16Gi"
+            # nvidia.com/gpu: 1  # 如果有 GPU
+        volumeMounts:
+        - name: ollama-data
+          mountPath: /root/.ollama
+      volumes:
+      - name: ollama-data
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+
+---
+# Ollama Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+  namespace: drug-qa
+spec:
+  selector:
+    app: ollama
+  ports:
+  - port: 11434
+    targetPort: 11434
+
+---
+# Ollama PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+  namespace: drug-qa
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# NVIDIA Device Plugin DaemonSet (如果集群有 GPU)
+# apiVersion: apps/v1
+# kind: DaemonSet
+# metadata:
+#   name: nvidia-device-plugin-daemonset
+#   namespace: kube-system
+# spec:
+#   selector:
+#     matchLabels:
+#       name: nvidia-device-plugin-ds
+#   template:
+#     metadata:
+#       labels:
+#         name: nvidia-device-plugin-ds
+#     spec:
+#       containers:
+#       - name: nvidia-device-plugin-ctr
+#         image: nvcr.io/nvidia/k8s-device-plugin:v0.14.0
+#         securityContext:
+#           allowPrivilegeEscalation: false
+#         volumeMounts:
+#         - name: device-plugin
+#           mountPath: /var/lib/kubelet/device-plugins
+#       volumes:
+#       - name: device-plugin
+#         hostPath:
+#           path: /var/lib/kubelet/device-plugins

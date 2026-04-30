@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # API Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: medication-guide:v1.0.0
+    container_name: medication-guide-api
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=medication_guide
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=root123
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OLLAMA_URL=http://ollama:11434
+      - MILVUS_URI=milvus:19530
+    depends_on:
+      - mysql
+      - redis
+      - ollama
+      - milvus
+    networks:
+      - medication-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: medication-guide-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root123
+      - MYSQL_DATABASE=medication_guide
+      - MYSQL_CHARSET=utf8mb4
+      - MYSQL_COLLATION=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - medication-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: medication-guide-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - medication-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Ollama LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: medication-guide-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - medication-network
+    restart: unless-stopped
+    # GPU support ( uncomment if GPU available )
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # Milvus Vector Database
+  milvus:
+    image: milvusdb/milvus:v2.4-latest
+    container_name: medication-guide-milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    depends_on:
+      - etcd
+      - minio
+    networks:
+      - medication-network
+    restart: unless-stopped
+
+  # Milvus dependencies
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: medication-guide-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+    volumes:
+      - etcd-data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - medication-network
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: medication-guide-minio
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    volumes:
+      - minio-data:/minio_data
+    command: minio server /minio_data
+    networks:
+      - medication-network
+    restart: unless-stopped
+
+networks:
+  medication-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  redis-data:
+  ollama-data:
+  milvus-data:
+  etcd-data:
+  minio-data:

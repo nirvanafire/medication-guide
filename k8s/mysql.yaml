@@ -1,0 +1,73 @@
+# MySQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  namespace: drug-qa
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:8.0
+        ports:
+        - containerPort: 3306
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: drug-qa-secret
+              key: mysql-password
+        - name: MYSQL_DATABASE
+          value: medication_guide
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: mysql-data
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: mysql-data
+        persistentVolumeClaim:
+          claimName: mysql-pvc
+
+---
+# MySQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+  namespace: drug-qa
+spec:
+  selector:
+    app: mysql
+  ports:
+  - port: 3306
+    targetPort: 3306
+
+---
+# MySQL PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  namespace: drug-qa
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
