@@ -10,6 +10,8 @@ import org.springframework.ai.document.Document;
 import org.springframework.stereotype.Service;
 
 import com.medication.config.RagConfig;
+import com.medication.util.HallucinationDetector;
+import com.medication.util.HallucinationDetector.HallucinationResult;
 
 import java.util.HashMap;
 import java.util.List;
@@ -196,7 +198,7 @@ public class RagService {
     public static class RagResult {
         private String answer;
         private List<Document> sources;
-        private HallucinationService.HallucinationResult hallucinationCheck;
+        private HallucinationResult hallucinationCheck;
         private Long latencyMs;
         private boolean success;
 
@@ -205,7 +207,7 @@ public class RagService {
         }
 
         public static RagResult success(String answer, List<Document> sources,
-                                         HallucinationService.HallucinationResult check, long latency) {
+                                         HallucinationResult check, long latency) {
             return RagResult.of(answer, sources, check, latency, true);
         }
     }

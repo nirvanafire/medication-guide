@@ -8,6 +8,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,15 +50,12 @@ public class VectorStoreService {
      * 根据问题检索相关文档片段
      */
     public List<Document> searchSimilar(String query, String drugName, int topK, double threshold) {
-        SearchRequest.Builder builder = SearchRequest.query(query)
-                .withTopK(topK)
-                .withSimilarityThreshold(threshold);
+        SearchRequest searchRequest = SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .similarityThreshold(threshold)
+                .build();
 
-        if (drugName != null && !drugName.isBlank()) {
-            builder.withFilterExpression("drug_name == '" + drugName + "'");
-        }
-
-        SearchRequest searchRequest = builder.build();
         List<Document> results = vectorStore.similaritySearch(searchRequest);
 
         log.info("检索完成: query='{}', topK={}, 返回 {} 条结果", query.substring(0, Math.min(30, query.length())), topK, results.size());
