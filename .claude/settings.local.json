@@ -26,7 +26,17 @@
       "Bash(jar tf *)",
       "Bash(curl -s http://localhost:11434/api/tags)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(mvn clean *)",
+      "Bash(mvn spring-boot:run)",
+      "Bash(mvn dependency:tree -Dincludes=*slf4j*)",
+      "Bash(mvn dependency:tree -Dincludes=dev.langchain4j)",
+      "Bash(mvn dependency:tree -Dincludes=org.springframework.ai)",
+      "Bash(kill -9 68370)",
+      "Bash(curl -s http://localhost:8080/actuator/health)",
+      "Bash(pkill -f \"spring-boot:run\")",
+      "Bash(pkill -f \"medication-guide\")",
+      "Bash(xargs kill *)"
     ]
   }
 }

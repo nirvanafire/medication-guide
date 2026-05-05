@@ -120,10 +120,8 @@ management:
     health:
       show-details: when-authorized
 
-# Logging
+# Logging (handled by log4j2.xml)
 logging:
   level:
     root: INFO
     com.medication: DEBUG
-    org.springframework.ai: INFO
-    io.milvus: INFO

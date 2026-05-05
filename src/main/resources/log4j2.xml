@@ -11,17 +11,17 @@
         </Console>
 
         <RollingFile name="RollingFile" fileName="${LOG_HOME}/application.log"
-                     filePattern="${LOG_HOME}/application-%d{yyyy-MM-dd}-%i.log.gz">
+                     filePattern="${LOG_HOME}/application-%d{yyyy-MM-dd}-%i.log">
             <PatternLayout pattern="${LOG_PATTERN}"/>
             <Policies>
                 <SizeBasedTriggeringPolicy size="10 MB"/>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
             </Policies>
-            <DefaultRolloverStrategy max="30" compressionMode="GZ"/>
+            <DefaultRolloverStrategy max="30"/>
         </RollingFile>
 
         <RollingFile name="ErrorFile" fileName="${LOG_HOME}/error.log"
-                     filePattern="${LOG_HOME}/error-%d{yyyy-MM-dd}-%i.log.gz">
+                     filePattern="${LOG_HOME}/error-%d{yyyy-MM-dd}-%i.log">
             <PatternLayout pattern="${LOG_PATTERN}"/>
             <Filters>
                 <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
@@ -30,27 +30,56 @@
                 <SizeBasedTriggeringPolicy size="10 MB"/>
                 <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
             </Policies>
-            <DefaultRolloverStrategy max="30" compressionMode="GZ"/>
+            <DefaultRolloverStrategy max="30"/>
         </RollingFile>
     </Appenders>
 
     <Loggers>
+        <!-- Application Loggers -->
         <Logger name="com.medication" level="DEBUG" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
             <AppenderRef ref="ErrorFile"/>
         </Logger>
 
+        <!-- Spring Framework Loggers -->
+        <Logger name="org.springframework" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+
+        <!-- Spring AI Loggers -->
         <Logger name="org.springframework.ai" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Logger>
 
+        <!-- Milvus Loggers -->
         <Logger name="io.milvus" level="INFO" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
         </Logger>
 
+        <!-- HikariCP Loggers -->
+        <Logger name="com.zaxxer.hikari" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+
+        <!-- Hibernate/JPA Loggers -->
+        <Logger name="org.hibernate" level="WARN" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+
+        <!-- OkHttp/Netty Loggers (reduce noise) -->
+        <Logger name="okhttp3" level="WARN" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+        <Logger name="io.netty" level="WARN" additivity="false">
+            <AppenderRef ref="RollingFile"/>
+        </Logger>
+
+        <!-- Root Logger -->
         <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RollingFile"/>
