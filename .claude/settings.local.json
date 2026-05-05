@@ -24,7 +24,9 @@
       "Bash(mvn compile *)",
       "Bash(mvn dependency:tree)",
       "Bash(jar tf *)",
-      "Bash(curl -s http://localhost:11434/api/tags)"
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

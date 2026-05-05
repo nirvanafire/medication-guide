@@ -2,11 +2,10 @@ package com.medication.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.model.ChatResponse;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.medication.config.RagConfig;
@@ -26,10 +25,13 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RagService {
 
-    private final ChatModel chatModel;
+    private final OllamaApi ollamaApi;
     private final VectorStoreService vectorStoreService;
     private final HallucinationService hallucinationService;
     private final RagConfig ragConfig;
+
+    @Value("${spring.ai.ollama.chat.model:qwen3.5:9b}")
+    private String model;
 
     /**
      * 处理用户问题，返回基于药品说明书的回答
@@ -127,6 +129,8 @@ public class RagService {
         return (double) matchCount / Math.max(1, queryTerms.length);
     }
 
+    private static final int MAX_CONTEXT_LENGTH = 3000;
+
     private String buildContext(List<Document> docs) {
         StringBuilder context = new StringBuilder();
         for (int i = 0; i < docs.size(); i++) {
@@ -134,6 +138,11 @@ public class RagService {
             String section = (String) doc.getMetadata().getOrDefault("section", "未知章节");
             context.append("【").append(section).append("】\n");
             context.append(doc.getText()).append("\n\n");
+
+            if (context.length() >= MAX_CONTEXT_LENGTH) {
+                context.setLength(MAX_CONTEXT_LENGTH);
+                break;
+            }
         }
         return context.toString();
     }
@@ -168,12 +177,29 @@ public class RagService {
     }
 
     private String callLlm(String prompt) {
+        log.debug("开始调用LLM, model={}, prompt长度={}", model, prompt.length());
+        long start = System.currentTimeMillis();
         try {
-            Prompt chatPrompt = new Prompt(prompt);
-            ChatResponse response = chatModel.call(chatPrompt);
-            return response.getResult().getOutput().getText();
+            Map<String, Object> options = Map.of(
+                    "num_predict", 1024,
+                    "num_ctx", 4096,
+                    "temperature", 0.1
+            );
+
+            OllamaApi.ChatRequest chatRequest = OllamaApi.ChatRequest.builder(model)
+                    .messages(List.of(new OllamaApi.Message(
+                            OllamaApi.Message.Role.USER, prompt, null, null)))
+                    .stream(false)
+                    .options(options)
+                    .build();
+
+            OllamaApi.ChatResponse response = ollamaApi.chat(chatRequest);
+            long elapsed = System.currentTimeMillis() - start;
+            log.debug("LLM调用完成, 耗时={}ms, eval_count={}", elapsed, response.evalCount());
+            return response.message().content();
         } catch (Exception e) {
-            log.error("LLM调用失败", e);
+            long elapsed = System.currentTimeMillis() - start;
+            log.error("LLM调用失败, 耗时={}ms", elapsed, e);
             return "系统暂时无法回答，请稍后再试。";
         }
     }

@@ -37,7 +37,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-      database: 0
+      database: 6
       timeout: 10000ms
       lettuce:
         pool:
@@ -47,20 +47,23 @@ spring:
   
   ai:
     ollama:
-      base-url: ${OLLAMA_URL:http://192.168.31.132:11434}
+      base-url: ${OLLAMA_URL:http://192.168.31.72:11434}
       chat:
         model: ${OLLAMA_MODEL:qwen2.5:7b}
+#        model: ${OLLAMA_MODEL:qwen3.5:9b}
         options:
           temperature: 0.1
           top-p: 0.9
       embedding:
-        base-url: ${OLLAMA_URL:http://192.168.31.132:11434}
-        model: ${EMBEDDING_MODEL:bge-large-zh-v1.5}
-    
+        base-url: ${OLLAMA_URL:http://192.168.31.72:11434}
+#        model: ${EMBEDDING_MODEL:quentinz/bge-large-zh-v1.5}
+        model: ${EMBEDDING_MODEL:bge-m3:latest}
+#        model: ${EMBEDDING_MODEL:bge-large-zh-v1.5}
+
     vectorstore:
         milvus:
-#          uri: http://192.168.31.132:19530
-          host: 192.168.31.132
+#          uri: http://192.168.31.72:19530
+          host: 192.168.31.72
           port: 19530
           database-name: ${MILVUS_DATABASE:medication_guide}
           collection-name: ${MILVUS_COLLECTION:drug_documents}
@@ -122,6 +125,5 @@ logging:
   level:
     root: INFO
     com.medication: DEBUG
-    org.springframework.ai: DEBUG
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    org.springframework.ai: INFO
+    io.milvus: INFO

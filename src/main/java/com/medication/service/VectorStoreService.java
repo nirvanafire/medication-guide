@@ -1,6 +1,7 @@
 package com.medication.service;
 
 import com.medication.util.DocumentParser;
+import io.milvus.client.MilvusServiceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -25,25 +26,64 @@ public class VectorStoreService {
 
     private final VectorStore vectorStore;
     private final DocumentParser documentParser;
+    private final MilvusServiceClient milvusClient;
+
+    private static final int MAX_EMBEDDING_TEXT_LENGTH = 1000; // bge-large-zh-v1.5 context limit
 
     /**
      * 将解析后的文档块存入向量库
      */
     public void storeChunks(List<DocumentParser.Chunk> chunks) {
-        List<Document> documents = chunks.stream()
-                .map(chunk -> {
-                    Map<String, Object> metadata = new HashMap<>();
-                    metadata.put("drug_name", chunk.getDrugName());
-                    metadata.put("section", chunk.getSection());
-                    metadata.put("chunk_index", chunk.getChunkIndex());
-                    metadata.put("token_count", chunk.getTokenCount());
+        log.info("开始存入向量库, chunk数量={}", chunks.size());
+        try {
+            int batchSize = 10;
+            for (int i = 0; i < chunks.size(); i += batchSize) {
+                int end = Math.min(i + batchSize, chunks.size());
+                List<DocumentParser.Chunk> batch = chunks.subList(i, end);
 
-                    return new Document(chunk.getContent(), metadata);
-                })
-                .collect(Collectors.toList());
+                List<Document> documents = batch.stream()
+                        .map(chunk -> {
+                            Map<String, Object> metadata = new HashMap<>();
+                            metadata.put("drug_name", chunk.getDrugName());
+                            metadata.put("section", chunk.getSection());
+                            metadata.put("chunk_index", chunk.getChunkIndex());
+                            metadata.put("token_count", chunk.getTokenCount());
 
-        vectorStore.add(documents);
-        log.info("成功存入 {} 个文档块到向量库", documents.size());
+                            String text = chunk.getContent();
+                            if (text.length() > MAX_EMBEDDING_TEXT_LENGTH) {
+                                text = text.substring(0, MAX_EMBEDDING_TEXT_LENGTH);
+                                log.warn("文本过长已截断: {} section={} original={}", chunk.getDrugName(), chunk.getSection(), chunk.getTokenCount());
+                            }
+
+                            return new Document(text, metadata);
+                        })
+                        .collect(Collectors.toList());
+
+                log.debug("批次[{}]准备存入 {} 个文档", (i / batchSize + 1), documents.size());
+                vectorStore.add(documents);
+                log.info("批次[{}/{}]存入向量库成功", (end / batchSize), (chunks.size() / batchSize + 1));
+            }
+            log.info("成功存入 {} 个文档块到向量库", chunks.size());
+        } catch (Exception e) {
+            log.error("存入向量库失败", e);
+            throw e;
+        }
+    }
+
+    /**
+     * 检查向量库连接状态
+     */
+    public boolean checkConnection() {
+        try {
+            milvusClient.describeCollection(
+                    io.milvus.param.collection.DescribeCollectionParam.newBuilder()
+                            .withCollectionName("drug_documents")
+                            .build());
+            return true;
+        } catch (Exception e) {
+            log.warn("向量库连接检查失败: {}", e.getMessage());
+            return false;
+        }
     }
 
     /**

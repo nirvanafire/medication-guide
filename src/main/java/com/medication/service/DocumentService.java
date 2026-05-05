@@ -7,14 +7,19 @@ import com.medication.repository.DocumentChunkRepository;
 import com.medication.util.DocumentParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 文档管理服务
@@ -115,14 +120,38 @@ public class DocumentService {
         log.info("文档已删除: {}", doc.getDrugName());
     }
 
-    private String parseContent(MultipartFile file, String contentType) throws IOException {
-        String content = new String(file.getBytes(), "UTF-8");
+    private static final Pattern TAG_PATTERN = Pattern.compile("【([^】]+】)");
 
-        // 简单的文本处理
-        content = content.replaceAll("\\s+", " ")
-                .replaceAll("【.*?】", "\n【$1】\n");
+    private String parseContent(MultipartFile file, String contentType) throws IOException {
+        String content;
+        String lowerContentType = contentType != null ? contentType.toLowerCase() : "";
+
+        if (lowerContentType.contains("wordprocessingml") || lowerContentType.contains("officedocument")) {
+            content = parseDocxContent(file.getInputStream());
+        } else {
+            content = new String(file.getBytes(), "UTF-8");
+            content = content.replaceAll("\\s+", " ")
+                    .replaceAll("【.*?】", "\n【$1】\n");
+        }
 
         return content.trim();
+    }
+
+    private String parseDocxContent(InputStream inputStream) throws IOException {
+        StringBuilder text = new StringBuilder();
+        try (XWPFDocument document = new XWPFDocument(inputStream)) {
+            for (XWPFParagraph paragraph : document.getParagraphs()) {
+                String paraText = paragraph.getText();
+                if (paraText != null && !paraText.isBlank()) {
+                    text.append(paraText).append("\n");
+                    Matcher matcher = TAG_PATTERN.matcher(paraText);
+                    if (matcher.find()) {
+                        text.append("\n");
+                    }
+                }
+            }
+        }
+        return text.toString();
     }
 
     private String getFileType(String fileName) {
