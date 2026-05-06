@@ -36,7 +36,16 @@
       "Bash(curl -s http://localhost:8080/actuator/health)",
       "Bash(pkill -f \"spring-boot:run\")",
       "Bash(pkill -f \"medication-guide\")",
-      "Bash(xargs kill *)"
+      "Bash(xargs kill *)",
+      "Bash(git push *)",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/drug-documents/parse-preview -F file=@/Users/nirvanafire/Downloads/药品说明书/阿莫西林胶囊.docx -F drugName=阿莫西林胶囊)",
+      "Bash(curl -s -X POST http://localhost:8080/api/v1/drug-documents/upload -F file=@/Users/nirvanafire/Downloads/药品说明书/氯雷他定2.docx -F drugName=氯雷他定)",
+      "Bash(curl -s \"http://localhost:8080/api/v1/drug-documents/51\")",
+      "Bash(curl -s \"http://localhost:8080/api/v1/drug-documents\")",
+      "Bash(curl -s -X POST \"http://localhost:8080/api/v1/drug-documents/57/rechunk\")",
+      "Bash(curl -s -X POST \"http://localhost:8080/api/v1/drug-documents/57/revectorize\")",
+      "Bash(curl -s -X POST \"http://localhost:8080/api/v1/drug-documents/batch-rechunk\")",
+      "Bash(curl -s -X POST \"http://localhost:8080/api/v1/drug-documents/batch-revectorize\")"
     ]
   }
 }
