@@ -24,6 +24,17 @@ public class RagConfig {
         private int topK = 5;
         private double similarityThreshold = 0.6;
         private boolean rerankEnabled = true;
+        private HybridConfig hybrid = new HybridConfig();
+    }
+
+    @Data
+    public static class HybridConfig {
+        private String fusionMethod = "RRF";
+        private int rrfK = 20;
+        private double vectorWeight = 0.5;
+        private double keywordWeight = 0.5;
+        private int vectorSearchLimit = 20;
+        private int bm25SearchLimit = 50;
     }
 
     @Data

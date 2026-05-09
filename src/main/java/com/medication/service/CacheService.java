@@ -1,5 +1,6 @@
 package com.medication.service;
 
+import com.medication.config.CacheConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -17,9 +18,20 @@ import java.util.Optional;
 public class CacheService {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final CacheConfig cacheConfig;
 
     private static final String CACHE_PREFIX = "medication:qa:";
-    private static final Duration CACHE_TTL = Duration.ofHours(24);
+
+    private Duration getCacheTtl() {
+        return Duration.ofHours(cacheConfig.getTtlHours());
+    }
+
+    /**
+     * 检查缓存是否启用
+     */
+    public boolean isEnabled() {
+        return cacheConfig.isEnabled();
+    }
 
     /**
      * 生成缓存 key
@@ -40,6 +52,9 @@ public class CacheService {
      */
     @SuppressWarnings("unchecked")
     public Optional<CachedAnswer> get(String key) {
+        if (!isEnabled()) {
+            return Optional.empty();
+        }
         try {
             Object value = redisTemplate.opsForValue().get(key);
             if (value instanceof java.util.Map) {
@@ -60,12 +75,15 @@ public class CacheService {
      * 缓存回答
      */
     public void put(String key, String answer, String sources, long latencyMs) {
+        if (!isEnabled()) {
+            return;
+        }
         try {
             java.util.Map<String, Object> value = new java.util.HashMap<>();
             value.put("answer", answer);
             value.put("sources", sources);
             value.put("latencyMs", latencyMs);
-            redisTemplate.opsForValue().set(key, value, CACHE_TTL);
+            redisTemplate.opsForValue().set(key, value, getCacheTtl());
             log.debug("已缓存: {}", key);
         } catch (Exception e) {
             log.warn("缓存写入失败", e);
@@ -76,6 +94,9 @@ public class CacheService {
      * 清除指定药品的缓存
      */
     public void clearByDrugName(String drugName) {
+        if (!isEnabled()) {
+            return;
+        }
         try {
             String pattern = CACHE_PREFIX + drugName + ":*";
             var keys = redisTemplate.keys(pattern);

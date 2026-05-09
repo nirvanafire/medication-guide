@@ -4,6 +4,7 @@ import com.medication.entity.DrugDocument;
 import com.medication.entity.DocumentChunk;
 import com.medication.repository.DrugDocumentRepository;
 import com.medication.repository.DocumentChunkRepository;
+import com.medication.util.BM25Scorer;
 import com.medication.util.DocumentParser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ public class DocumentService {
     private final DrugDocumentRepository documentRepository;
     private final DocumentChunkRepository chunkRepository;
     private final VectorStoreService vectorStoreService;
+    private final BM25Scorer bm25Scorer;
     private final DocumentParser documentParser;
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -253,8 +255,14 @@ public class DocumentService {
     }
 
     @Transactional
-    public BatchRevectorizeResult revectorizeAllDocuments() {
-        log.info("开始批量重新向量化所有文档");
+    public BatchRevectorizeResult revectorizeAllDocuments(boolean clearFirst) {
+        log.info("开始批量重新向量化所有文档, clearFirst={}", clearFirst);
+
+        if (clearFirst) {
+            vectorStoreService.deleteAll();
+            bm25Scorer.clear();
+            log.info("已清空向量库和BM25索引");
+        }
 
         List<DrugDocument> allDocs = documentRepository.findAll();
         List<BatchItemResult> results = new java.util.ArrayList<>();

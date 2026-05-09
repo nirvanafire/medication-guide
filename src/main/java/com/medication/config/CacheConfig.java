@@ -1,0 +1,13 @@
+package com.medication.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
+
+@Data
+@Configuration
+@ConfigurationProperties(prefix = "cache")
+public class CacheConfig {
+    private boolean enabled = false;
+    private int ttlHours = 24;
+}

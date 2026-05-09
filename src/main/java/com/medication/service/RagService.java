@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.medication.config.RagConfig;
+import com.medication.dto.HybridSearchResult;
 import com.medication.util.HallucinationDetector.HallucinationResult;
 
 import java.util.HashMap;
@@ -43,21 +44,23 @@ public class RagService {
         String rewrittenQuery = rewriteQuery(question, drugName);
         log.debug("查询重写: '{}' -> '{}'", question, rewrittenQuery);
 
-        // 2. 混合检索
-        double threshold = ragConfig.getRetrieval().getSimilarityThreshold();
-        List<Document> relevantDocs = vectorStoreService.hybridSearch(
-                rewrittenQuery, drugName, topK, threshold
+        // 2. Enhanced hybrid search with RRF fusion
+        RagConfig.HybridConfig hybridConfig = ragConfig.getRetrieval().getHybrid();
+        List<HybridSearchResult> hybridResults = vectorStoreService.hybridSearchEnhanced(
+                rewrittenQuery, drugName, topK, hybridConfig
         );
 
-        if (relevantDocs.isEmpty()) {
+        if (hybridResults.isEmpty()) {
             return RagResult.noData("根据药品说明书，未找到相关信息");
         }
 
-        // 3. 重排序（基于内容相关性）
-        List<Document> rerankedDocs = rerank(relevantDocs, rewrittenQuery);
+        // 3. Extract documents for further processing
+        List<Document> relevantDocs = hybridResults.stream()
+                .map(HybridSearchResult::getDocument)
+                .collect(Collectors.toList());
 
-        // 4. 构建上下文
-        String context = buildContext(rerankedDocs);
+        // 4. Build context
+        String context = buildContext(relevantDocs);
 
         // 5. 构建 Prompt 并调用 LLM
         String prompt = buildPrompt(context, question);
@@ -67,14 +70,16 @@ public class RagService {
         answer = postProcess(answer);
 
         // 7. 幻觉检测
-        List<String> sourceContents = rerankedDocs.stream()
+        List<String> sourceContents = relevantDocs.stream()
                 .map(Document::getText)
                 .collect(Collectors.toList());
         var hallucinationCheck = hallucinationService.check(answer, sourceContents);
 
         long latency = System.currentTimeMillis() - startTime;
 
-        return RagResult.success(answer, rerankedDocs, hallucinationCheck, latency);
+        log.info("Query completed: latency={}ms, sources={}", latency, relevantDocs.size());
+
+        return RagResult.success(answer, relevantDocs, hallucinationCheck, latency);
     }
 
     /**

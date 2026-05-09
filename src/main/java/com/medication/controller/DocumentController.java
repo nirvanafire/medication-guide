@@ -5,6 +5,8 @@ import com.medication.dto.DocumentResponse;
 import com.medication.dto.ParsedResultResponse;
 import com.medication.entity.DrugDocument;
 import com.medication.service.DocumentService;
+import com.medication.service.VectorStoreService;
+import com.medication.util.BM25Scorer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +25,8 @@ import java.util.stream.Collectors;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final VectorStoreService vectorStoreService;
+    private final BM25Scorer bm25Scorer;
 
     /**
      * 上传药品说明书
@@ -166,17 +170,32 @@ public class DocumentController {
     }
 
     /**
-     * 批量重新向量化所有文档
+     * 批量重新向量化所有文档（先清空向量库）
      */
     @PostMapping("/batch-revectorize")
     public ApiResponse<DocumentService.BatchRevectorizeResult> batchRevectorize() {
         try {
-            log.info("开始批量重新向量化所有文档");
-            DocumentService.BatchRevectorizeResult result = documentService.revectorizeAllDocuments();
+            log.info("开始批量重新向量化所有文档（先清空向量库）");
+            DocumentService.BatchRevectorizeResult result = documentService.revectorizeAllDocuments(true);
             return ApiResponse.success(result);
         } catch (Exception e) {
             log.error("批量重新向量化文档失败", e);
             return ApiResponse.error("批量重新向量化失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 清空向量库
+     */
+    @DeleteMapping("/vector-db/clear")
+    public ApiResponse<String> clearVectorDb() {
+        try {
+            vectorStoreService.deleteAll();
+            bm25Scorer.clear();
+            return ApiResponse.success("向量库已清空，BM25索引已清除");
+        } catch (Exception e) {
+            log.error("清空向量库失败", e);
+            return ApiResponse.error("清空向量库失败: " + e.getMessage());
         }
     }
 
