@@ -63,12 +63,11 @@ public class VectorStoreService {
                     String chunkKey = chunk.getDrugName() + ":" + chunk.getSection() + ":" + chunk.getChunkIndex();
                     metadata.put("chunk_key", chunkKey);
 
-                    // 构建带有章节标题前缀的内容
-                    /*String sectionPrefix = chunk.getChunkIndex() == 0
+                    // 构建带有章节标题前缀的文本，提升向量检索相关性
+                    String sectionPrefix = chunk.getChunkIndex() == 0
                             ? "【" + chunk.getSection() + "】"
-                            : "【" + chunk.getSection() + "】（续）";*/
-
-                    String text = chunk.getContent();
+                            : "【" + chunk.getSection() + "】（续）";
+                    String text = sectionPrefix + chunk.getContent();
                     if (text.length() > MAX_EMBEDDING_TEXT_LENGTH) {
                         text = text.substring(0, MAX_EMBEDDING_TEXT_LENGTH);
                         log.warn("文本过长已截断: {} section={} original={}", chunk.getDrugName(), chunk.getSection(), chunk.getTokenCount());
