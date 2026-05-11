@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * BM25 scorer for keyword-based document ranking
@@ -78,6 +79,21 @@ public class BM25Scorer {
     }
 
     /**
+     * Remove documents by drug name
+     */
+    public void removeByDrugName(String drugName) {
+        String prefix = drugName + ":";
+        List<String> keysToRemove = documentCorpus.keySet().stream()
+                .filter(key -> key.startsWith(prefix))
+                .collect(Collectors.toList());
+
+        for (String key : keysToRemove) {
+            removeDocument(key);
+        }
+        log.info("BM25 index: removed {} docs for drug {}", keysToRemove.size(), drugName);
+    }
+
+    /**
      * Calculate BM25 score for a query against a single document
      */
     public double score(String docId, String query) {
@@ -127,6 +143,19 @@ public class BM25Scorer {
      */
     public Map<String, Double> scoreAll(String query) {
         return scoreDocuments(query, new ArrayList<>(documentCorpus.keySet()));
+    }
+
+    /**
+     * Get top N document IDs by BM25 score
+     */
+    public List<String> getTopDocIds(String query, int limit) {
+        Map<String, Double> scores = scoreAll(query);
+        return scores.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .limit(limit)
+                .filter(e -> e.getValue() > 0)  // 只返回有分数的
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
     }
 
     private double calculateIdf(long docFreq) {

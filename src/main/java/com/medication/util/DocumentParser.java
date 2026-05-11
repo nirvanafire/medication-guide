@@ -280,14 +280,18 @@ public class DocumentParser {
 
     private List<String> splitByTokenSize(String text, int chunkSize, int overlap) {
         List<String> chunks = new ArrayList<>();
-        if (text.length() <= chunkSize * 3) {
+        // 修正：chunkSize 和 overlap 单位是 token（约2字符/token）
+        int chunkSizeInChars = chunkSize * 2;
+        int overlapInChars = overlap * 2;
+
+        if (text.length() <= chunkSizeInChars) {
             chunks.add(text);
             return chunks;
         }
 
-        int step = chunkSize * 3 - overlap * 3;
+        int step = chunkSizeInChars - overlapInChars;
         for (int i = 0; i < text.length(); i += step) {
-            int end = Math.min(i + chunkSize * 3, text.length());
+            int end = Math.min(i + chunkSizeInChars, text.length());
             String chunk = text.substring(i, end);
             chunks.add(chunk);
             if (end >= text.length()) break;

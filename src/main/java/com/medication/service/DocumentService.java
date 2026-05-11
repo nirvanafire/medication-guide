@@ -12,6 +12,8 @@ import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -378,8 +380,10 @@ public class DocumentService {
         String content;
         String lowerType = fileType != null ? fileType.toLowerCase() : "";
 
-        if ("docx".equals(lowerType) || "pdf".equals(lowerType)) {
+        if ("docx".equals(lowerType)) {
             content = parseDocxContent(file.getInputStream());
+        } else if ("pdf".equals(lowerType)) {
+            content = parsePdfContent(file.getInputStream());
         } else {
             // md or txt or unknown
             content = new String(file.getBytes(), "UTF-8");
@@ -405,6 +409,41 @@ public class DocumentService {
             }
         }
         return text.toString();
+    }
+
+    private String parsePdfContent(InputStream inputStream) throws IOException {
+        StringBuilder text = new StringBuilder();
+        try (PDDocument document = org.apache.pdfbox.Loader.loadPDF(inputStream.readAllBytes())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setSortByPosition(true);
+
+            int totalPages = document.getNumberOfPages();
+            log.info("PDF文档总页数: {}", totalPages);
+
+            for (int i = 1; i <= totalPages; i++) {
+                stripper.setStartPage(i);
+                stripper.setEndPage(i);
+                String pageText = stripper.getText(document);
+
+                if (pageText != null && !pageText.isBlank()) {
+                    // 清理PDF提取的文本（去除多余空白）
+                    pageText = pageText.replaceAll("[ \\t]+", " ")
+                                       .replaceAll("\\r\\n", "\n")
+                                       .replaceAll("\\n{3,}", "\n\n")
+                                       .trim();
+                    text.append(pageText).append("\n");
+                }
+
+                if (i % 10 == 0) {
+                    log.debug("已处理 PDF 第 {}/{} 页", i, totalPages);
+                }
+            }
+
+            // 标准化章节标签格式
+            String content = text.toString();
+            content = content.replaceAll("【([^】]+】)", "\n【$1】\n");
+            return content;
+        }
     }
 
     private String getFileType(String fileName) {

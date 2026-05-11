@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -35,6 +36,9 @@ public class VectorStoreService {
     private final RagConfig ragConfig;
 
     private static final int MAX_EMBEDDING_TEXT_LENGTH = 1000; // bge-large-zh-v1.5 context limit
+
+    // 内存缓存：chunk_key -> Document，用于 BM25 快速检索
+    private final Map<String, Document> chunkKeyCache = new HashMap<>();
 
     /**
      * 将解析后的文档块存入向量库
@@ -75,6 +79,9 @@ public class VectorStoreService {
 
                     // Sync to BM25 index using stable chunk key
                     bm25Scorer.addDocument(chunkKey, text);
+
+                    // 缓存 Document 用于 BM25 快速检索
+                    chunkKeyCache.put(chunkKey, doc);
                 }
 
                 log.debug("批次[{}]准备存入 {} 个文档", (i / batchSize + 1), documents.size());
@@ -191,6 +198,10 @@ public class VectorStoreService {
                             .withExpr("drug_name == \"" + drugName + "\"")
                             .build()
             );
+            // 清理缓存
+            clearCacheByDrugName(drugName);
+            // 从 BM25 索引中移除
+            bm25Scorer.removeByDrugName(drugName);
             log.info("已删除药品 [{}] 的向量数据", drugName);
         } catch (Exception e) {
             log.error("删除向量数据失败: drugName={}", drugName, e);
@@ -208,6 +219,10 @@ public class VectorStoreService {
                             .withExpr("true")
                             .build()
             );
+            // 清空缓存
+            clearCache();
+            // 清空 BM25 索引
+            bm25Scorer.clear();
             log.info("已删除所有向量数据");
         } catch (Exception e) {
             log.error("删除所有向量数据失败", e);
@@ -215,91 +230,210 @@ public class VectorStoreService {
     }
 
     /**
-     * Enhanced hybrid search with RRF fusion
+     * BM25 关键词独立检索
+     * 通过 BM25 分数获取 top N 匹配的文档（使用内存缓存）
      */
-    public List<HybridSearchResult> hybridSearchEnhanced(String query, String drugName,
-                                                          int topK, RagConfig.HybridConfig config) {
-        // 1. Vector semantic search
-        int vectorLimit = config.getVectorSearchLimit();
-        List<Document> vectorResults = searchSimilar(query, drugName, vectorLimit, 0);
+    public List<Document> bm25Search(String query, String drugName, int limit) {
+        // 1. 获取 BM25 分数最高的 docIds
+        List<String> topDocIds = bm25Scorer.getTopDocIds(query, limit);
 
-        if (vectorResults.isEmpty()) {
-            log.warn("Vector search returned no results for query: {}", query);
+        if (topDocIds.isEmpty()) {
+            log.debug("BM25 检索无结果: query={}", query);
             return new ArrayList<>();
         }
 
-        log.info("Vector search returned {} results", vectorResults.size());
+        log.debug("BM25 top docIds: {} 个, query={}", topDocIds.size(), query);
 
-        // 2. Calculate BM25 scores for vector results using chunk_key from metadata
-        Map<String, Double> bm25Scores = new HashMap<>();
-        for (Document doc : vectorResults) {
-            String chunkKey = (String) doc.getMetadata().get("chunk_key");
-            if (chunkKey == null) {
-                chunkKey = doc.getId();
+        // 2. 从缓存中获取 Document 并过滤 drugName
+        List<Document> results = new ArrayList<>();
+        for (String chunkKey : topDocIds) {
+            Document doc = chunkKeyCache.get(chunkKey);
+            if (doc != null) {
+                String docDrugName = (String) doc.getMetadata().get("drug_name");
+                if (drugName == null || drugName.isBlank() || drugName.equals(docDrugName)) {
+                    results.add(doc);
+                    if (results.size() >= limit) break;
+                }
             }
-            double score = bm25Scorer.score(chunkKey, query);
-            bm25Scores.put(chunkKey, score);
-
-            // Debug logging for retrieved docs
-            String section = (String) doc.getMetadata().getOrDefault("section", "unknown");
-            log.debug("Retrieved doc: section={}, chunkKey={}, vectorScore={}, bm25Score={}",
-                    section, chunkKey, extractVectorScore(doc), score);
         }
 
-        log.info("BM25 scores calculated, max={}, min={}",
-                bm25Scores.values().stream().mapToDouble(Double::doubleValue).summaryStatistics().getMax(),
-                bm25Scores.values().stream().mapToDouble(Double::doubleValue).summaryStatistics().getMin());
+        log.info("BM25 检索完成: query='{}', drugName='{}', 获取 {} 个文档",
+                query.substring(0, Math.min(20, query.length())), drugName, results.size());
 
-        // 3. Build hybrid results with initial vector scores
-        List<HybridSearchResult> hybridResults = new ArrayList<>();
-        for (Document doc : vectorResults) {
-            String chunkKey = (String) doc.getMetadata().get("chunk_key");
-            if (chunkKey == null) {
-                chunkKey = doc.getId();
-            }
-            hybridResults.add(new HybridSearchResult(
-                    doc,
-                    extractVectorScore(doc),
-                    bm25Scores.getOrDefault(chunkKey, 0.0)
-            ));
+        return results;
+    }
+
+    /**
+     * 清理缓存中的指定药品数据
+     */
+    public void clearCacheByDrugName(String drugName) {
+        chunkKeyCache.entrySet().removeIf(entry -> {
+            String entryDrugName = (String) entry.getValue().getMetadata().get("drug_name");
+            return drugName.equals(entryDrugName);
+        });
+        log.info("已清理缓存中药品 [{}] 的数据", drugName);
+    }
+
+    /**
+     * 清空所有缓存
+     */
+    public void clearCache() {
+        chunkKeyCache.clear();
+        log.info("已清空所有缓存");
+    }
+
+    /**
+     * Enhanced hybrid search with dual-channel retrieval and weighted RRF fusion
+     * 双通道独立检索 + 加权 RRF 融合
+     */
+    public List<HybridSearchResult> hybridSearchEnhanced(String query, String drugName,
+                                                          int topK, RagConfig.HybridConfig config) {
+        // 获取配置参数
+        int vectorLimit = config.getVectorSearchLimit();
+        int bm25Limit = config.getBm25SearchLimit();
+        double similarityThreshold = ragConfig.getRetrieval().getSimilarityThreshold();
+        double vectorWeight = config.getVectorWeight();
+        double keywordWeight = config.getKeywordWeight();
+
+        // 1. 向量语义检索通道
+        List<Document> vectorResults = searchSimilar(query, drugName, vectorLimit, similarityThreshold);
+        log.info("向量检索: query='{}', drugName='{}', 获取 {} 条结果, threshold={}",
+                query.substring(0, Math.min(20, query.length())), drugName, vectorResults.size(), similarityThreshold);
+
+        // 2. BM25 关键词独立检索通道
+        List<Document> bm25Results = bm25Search(query, drugName, bm25Limit);
+        log.info("BM25检索: query='{}', drugName='{}', 获取 {} 条结果",
+                query.substring(0, Math.min(20, query.length())), drugName, bm25Results.size());
+
+        // 如果两个通道都无结果，返回空
+        if (vectorResults.isEmpty() && bm25Results.isEmpty()) {
+            log.warn("双通道检索均无结果: query={}", query);
+            return new ArrayList<>();
         }
 
-        // 4. Assign ranks (vector score and BM25 score)
+        // 3. 合并结果集（去重）
+        Map<String, HybridSearchResult> resultMap = new LinkedHashMap<>();
+
+        // 添加向量结果
+        for (Document doc : vectorResults) {
+            String chunkKey = getChunkKey(doc);
+            double vectorScore = extractVectorScore(doc);
+            resultMap.put(chunkKey, new HybridSearchResult(doc, vectorScore, 0.0));
+        }
+
+        // 补充 BM25 结果（只添加不在向量结果中的）
+        for (Document doc : bm25Results) {
+            String chunkKey = getChunkKey(doc);
+            if (!resultMap.containsKey(chunkKey)) {
+                // 从缓存获取 BM25 分数
+                double bm25Score = bm25Scorer.score(chunkKey, query);
+                resultMap.put(chunkKey, new HybridSearchResult(doc, 0.0, bm25Score));
+            }
+        }
+
+        List<HybridSearchResult> hybridResults = new ArrayList<>(resultMap.values());
+
+        log.info("合并后结果数: {} (向量:{} + BM25:{})",
+                hybridResults.size(), vectorResults.size(), bm25Results.size());
+
+        // 4. 分配排名（按各自的分数）
         assignRanks(hybridResults, HybridSearchResult::getVectorScore, HybridSearchResult::setVectorRank);
         assignRanks(hybridResults, HybridSearchResult::getBm25Score, HybridSearchResult::setBm25Rank);
 
-        // 6. Apply RRF fusion
+        // 5. 加权 RRF 融合
         int rrfK = config.getRrfK();
         for (HybridSearchResult result : hybridResults) {
-            double rrfScore = 1.0 / (rrfK + result.getVectorRank())
-                            + 1.0 / (rrfK + result.getBm25Rank());
-            result.setFusedScore(rrfScore);
+            double fusedScore = (vectorWeight / (rrfK + result.getVectorRank()))
+                              + (keywordWeight / (rrfK + result.getBm25Rank()));
+            result.setFusedScore(fusedScore);
+
+            String section = (String) result.getDocument().getMetadata().getOrDefault("section", "unknown");
+            log.debug("融合结果: section={}, vectorScore={}, bm25Score={}, vectorRank={}, bm25Rank={}, fusedScore={}",
+                    section, result.getVectorScore(), result.getBm25Score(),
+                    result.getVectorRank(), result.getBm25Rank(), fusedScore);
         }
 
-        // 7. Sort by fused score and return topK
+        // 6. 按融合分数排序并返回 topK
         hybridResults.sort(HybridSearchResult.byFusedScoreDescending());
 
         List<HybridSearchResult> topResults = hybridResults.stream()
                 .limit(topK)
                 .collect(Collectors.toList());
 
-        log.info("Hybrid search completed: {} results, top score={}",
+        log.info("混合检索完成: topK={}, 融合分数最高的章节: {}",
                 topResults.size(),
-                topResults.isEmpty() ? 0 : topResults.get(0).getFusedScore());
+                topResults.isEmpty() ? "无" : topResults.get(0).getDocument().getMetadata().get("section"));
 
-        // Log top results with sections for debugging
+        // Fallback: 混合检索无结果时，尝试按 section 名称匹配
+        if (topResults.isEmpty() && query.length() <= 10) {
+            log.info("混合检索无结果，尝试按 section 名称精确匹配: query={}", query);
+            topResults = searchBySectionName(query, drugName, topK);
+        }
+
+        // 输出 top3 结果用于调试
         if (!topResults.isEmpty()) {
             String topSections = topResults.stream()
                     .limit(3)
                     .map(r -> {
                         String section = (String) r.getDocument().getMetadata().getOrDefault("section", "unknown");
-                        return section + "(" + String.format("%.3f", r.getFusedScore()) + ")";
+                        return section + "(vec:" + String.format("%.2f", r.getVectorScore())
+                                + "/bm25:" + String.format("%.2f", r.getBm25Score())
+                                + "/fused:" + String.format("%.3f", r.getFusedScore()) + ")";
                     })
                     .collect(Collectors.joining(", "));
-            log.info("Top sections: {}", topSections);
+            log.info("Top3结果: {}", topSections);
         }
 
         return topResults;
+    }
+
+    /**
+     * Fallback: 按 section 名称精确匹配
+     */
+    private List<HybridSearchResult> searchBySectionName(String sectionName, String drugName, int topK) {
+        List<HybridSearchResult> results = new ArrayList<>();
+
+        for (Document doc : chunkKeyCache.values()) {
+            String docDrugName = (String) doc.getMetadata().get("drug_name");
+            String docSection = (String) doc.getMetadata().get("section");
+
+            // 匹配药品名和章节名
+            boolean drugMatch = drugName == null || drugName.isBlank() || drugName.equals(docDrugName);
+            boolean sectionMatch = docSection != null && docSection.contains(sectionName);
+
+            if (drugMatch && sectionMatch) {
+                String chunkKey = getChunkKey(doc);
+                double bm25Score = bm25Scorer.score(chunkKey, sectionName);
+                results.add(new HybridSearchResult(doc, 0.5, bm25Score));
+            }
+
+            if (results.size() >= topK * 2) break;
+        }
+
+        if (results.isEmpty()) {
+            log.warn("Section fallback 也无结果: section={}", sectionName);
+            return results;
+        }
+
+        // 分配排名并融合
+        assignRanks(results, HybridSearchResult::getVectorScore, HybridSearchResult::setVectorRank);
+        assignRanks(results, HybridSearchResult::getBm25Score, HybridSearchResult::setBm25Rank);
+
+        int rrfK = 20;
+        double vectorWeight = 0.4;
+        double keywordWeight = 0.6;
+        for (HybridSearchResult r : results) {
+            r.setFusedScore(vectorWeight / (rrfK + r.getVectorRank())
+                           + keywordWeight / (rrfK + r.getBm25Rank()));
+        }
+
+        results.sort(HybridSearchResult.byFusedScoreDescending());
+        return results.stream().limit(topK).collect(Collectors.toList());
+    }
+
+    private String getChunkKey(Document doc) {
+        String chunkKey = (String) doc.getMetadata().get("chunk_key");
+        return chunkKey != null ? chunkKey : doc.getId();
     }
 
     private double extractVectorScore(Document doc) {
