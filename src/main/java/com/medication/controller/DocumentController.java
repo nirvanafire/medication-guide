@@ -34,9 +34,11 @@ public class DocumentController {
     @PostMapping("/upload")
     public ApiResponse<DocumentResponse.DocumentInfo> upload(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("drugName") String drugName) {
+            @RequestParam(value = "drugName", required = false) String drugName) {
         try {
-            DrugDocument doc = documentService.uploadDocument(file, drugName);
+            String name = (drugName != null && !drugName.isBlank()) ? drugName : extractDrugName(file.getOriginalFilename());
+            log.info("上传文档: file={}, drugName={}", file.getOriginalFilename(), name);
+            DrugDocument doc = documentService.uploadDocument(file, name);
             return ApiResponse.success(toDocumentInfo(doc));
         } catch (Exception e) {
             log.error("文档上传失败", e);
