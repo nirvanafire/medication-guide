@@ -9,6 +9,7 @@ import com.medication.service.VectorStoreService;
 import com.medication.util.BM25Scorer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,7 +37,7 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "drugName", required = false) String drugName) {
         try {
-            String name = (drugName != null && !drugName.isBlank()) ? drugName : extractDrugName(file.getOriginalFilename());
+            String name = StringUtils.isNotBlank(drugName) ? drugName : extractDrugName(file.getOriginalFilename());
             log.info("上传文档: file={}, drugName={}", file.getOriginalFilename(), name);
             DrugDocument doc = documentService.uploadDocument(file, name);
             return ApiResponse.success(toDocumentInfo(doc));
