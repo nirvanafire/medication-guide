@@ -374,7 +374,7 @@ public class DocumentService {
         String errorMessage;
     }
 
-    private static final Pattern TAG_PATTERN = Pattern.compile("【([^】]+】)");
+    private static final Pattern TAG_PATTERN = Pattern.compile("【([^】]+)】");
 
     private String parseContent(MultipartFile file, String fileType) throws IOException {
         String content;
@@ -420,18 +420,28 @@ public class DocumentService {
             int totalPages = document.getNumberOfPages();
             log.info("PDF文档总页数: {}", totalPages);
 
+            // PDF左右布局单行最大字符数阈值（中文药品说明书通常不超过80字符）
+            final int MAX_LINE_WIDTH = 80;
+
             for (int i = 1; i <= totalPages; i++) {
                 stripper.setStartPage(i);
                 stripper.setEndPage(i);
                 String pageText = stripper.getText(document);
 
                 if (pageText != null && !pageText.isBlank()) {
-                    // 清理PDF提取的文本（去除多余空白）
-                    pageText = pageText.replaceAll("[ \\t]+", " ")
-                                       .replaceAll("\\r\\n", "\n")
-                                       .replaceAll("\\n{3,}", "\n\n")
-                                       .trim();
-                    text.append(pageText).append("\n");
+                    // 按行处理，过滤超长行（可能是左右布局误读的内容）
+                    String[] lines = pageText.split("\\r?\\n");
+                    for (String line : lines) {
+                        // 清理每行文本
+                        line = line.replaceAll("[ \\t]+", " ").trim();
+                        // 过滤过长的行（疑似左右布局误读）
+                        if (line.length() <= MAX_LINE_WIDTH && !line.isBlank()) {
+                            text.append(line).append("\n");
+                        } else if (line.contains("【") && line.contains("】")) {
+                            // 章节标签行即使稍长也保留
+                            text.append(line).append("\n");
+                        }
+                    }
                 }
 
                 if (i % 10 == 0) {
@@ -441,7 +451,7 @@ public class DocumentService {
 
             // 标准化章节标签格式
             String content = text.toString();
-            content = content.replaceAll("【([^】]+】)", "\n【$1】\n");
+            content = content.replaceAll("【([^】]+)】", "\n【$1】\n");
             return content;
         }
     }
