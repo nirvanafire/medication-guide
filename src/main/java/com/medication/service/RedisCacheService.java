@@ -3,6 +3,7 @@ package com.medication.service;
 import com.medication.config.CacheConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -10,12 +11,13 @@ import java.time.Duration;
 import java.util.Optional;
 
 /**
- * 缓存服务 - 热点问答缓存
+ * Redis cache service implementation
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CacheService {
+@ConditionalOnProperty(name = "cache.type", havingValue = "redis", matchIfMissing = true)
+public class RedisCacheService implements ICacheService {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final CacheConfig cacheConfig;
@@ -26,16 +28,12 @@ public class CacheService {
         return Duration.ofHours(cacheConfig.getTtlHours());
     }
 
-    /**
-     * 检查缓存是否启用
-     */
+    @Override
     public boolean isEnabled() {
         return cacheConfig.isEnabled();
     }
 
-    /**
-     * 生成缓存 key
-     */
+    @Override
     public String generateKey(String question, String drugName) {
         String normalizedQuestion = question.toLowerCase()
                 .replaceAll("[?？!！。，,、]", "")
@@ -47,10 +45,7 @@ public class CacheService {
         return CACHE_PREFIX + key.hashCode();
     }
 
-    /**
-     * 获取缓存的回答
-     */
-    @SuppressWarnings("unchecked")
+    @Override
     public Optional<CachedAnswer> get(String key) {
         if (!isEnabled()) {
             return Optional.empty();
@@ -66,14 +61,12 @@ public class CacheService {
                 ));
             }
         } catch (Exception e) {
-            log.warn("缓存读取失败", e);
+            log.warn("Redis cache read failed", e);
         }
         return Optional.empty();
     }
 
-    /**
-     * 缓存回答
-     */
+    @Override
     public void put(String key, String answer, String sources, long latencyMs) {
         if (!isEnabled()) {
             return;
@@ -84,15 +77,13 @@ public class CacheService {
             value.put("sources", sources);
             value.put("latencyMs", latencyMs);
             redisTemplate.opsForValue().set(key, value, getCacheTtl());
-            log.debug("已缓存: {}", key);
+            log.debug("Cached: {}", key);
         } catch (Exception e) {
-            log.warn("缓存写入失败", e);
+            log.warn("Redis cache write failed", e);
         }
     }
 
-    /**
-     * 清除指定药品的缓存
-     */
+    @Override
     public void clearByDrugName(String drugName) {
         if (!isEnabled()) {
             return;
@@ -102,18 +93,10 @@ public class CacheService {
             var keys = redisTemplate.keys(pattern);
             if (keys != null && !keys.isEmpty()) {
                 redisTemplate.delete(keys);
-                log.info("已清除缓存: {} keys", keys.size());
+                log.info("Cleared cache: {} keys", keys.size());
             }
         } catch (Exception e) {
-            log.warn("缓存清除失败", e);
+            log.warn("Redis cache clear failed", e);
         }
-    }
-
-    @lombok.Data
-    @lombok.AllArgsConstructor
-    public static class CachedAnswer {
-        private String answer;
-        private String sources;
-        private Long latencyMs;
     }
 }

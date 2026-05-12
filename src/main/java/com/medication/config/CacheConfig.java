@@ -10,4 +10,5 @@ import org.springframework.context.annotation.Configuration;
 public class CacheConfig {
     private boolean enabled = false;
     private int ttlHours = 24;
+    private String type = "redis";
 }

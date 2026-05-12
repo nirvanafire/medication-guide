@@ -54,11 +54,13 @@ spring:
         options:
           temperature: 0.1
           top-p: 0.9
+        timeout: 240s
       embedding:
         base-url: ${OLLAMA_URL:http://192.168.31.72:11434}
 #        model: ${EMBEDDING_MODEL:quentinz/bge-large-zh-v1.5}
         model: ${EMBEDDING_MODEL:bge-m3:latest}
 #        model: ${EMBEDDING_MODEL:bge-large-zh-v1.5}
+        timeout: 120s
 
     vectorstore:
         milvus:
@@ -116,6 +118,7 @@ hallucination:
 cache:
   enabled: ${CACHE_ENABLED:true}
   ttl-hours: 24
+  type: ${CACHE_TYPE:guava}
 
 # API Rate Limiting
 rate-limit:

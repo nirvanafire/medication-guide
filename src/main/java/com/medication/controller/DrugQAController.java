@@ -3,7 +3,7 @@ package com.medication.controller;
 import com.medication.dto.*;
 import com.medication.entity.QueryLog;
 import com.medication.repository.QueryLogRepository;
-import com.medication.service.CacheService;
+import com.medication.service.ICacheService;
 import com.medication.service.RagService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 public class DrugQAController {
 
     private final RagService ragService;
-    private final CacheService cacheService;
+    private final ICacheService cacheService;
     private final QueryLogRepository queryLogRepository;
 
     /**
