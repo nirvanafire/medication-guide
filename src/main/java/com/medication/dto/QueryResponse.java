@@ -26,6 +26,27 @@ public class QueryResponse {
         private List<Source> sources;
         private HallucinationCheck hallucinationCheck;
         private Long latencyMs;
+        private DrugNameMetadata drugNameMetadata;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DrugNameMetadata {
+        private String confirmedDrugName;
+        private String matchType;
+        private List<DrugCandidate> candidates;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DrugCandidate {
+        private String name;
+        private Double similarity;
+        private String matchType;
     }
 
     @Data

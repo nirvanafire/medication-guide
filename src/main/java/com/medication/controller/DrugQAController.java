@@ -5,6 +5,8 @@ import com.medication.entity.QueryLog;
 import com.medication.repository.QueryLogRepository;
 import com.medication.service.ICacheService;
 import com.medication.service.RagService;
+import com.medication.service.DrugExtractionService;
+import com.medication.service.DrugNameVectorService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,7 @@ public class DrugQAController {
     private final RagService ragService;
     private final ICacheService cacheService;
     private final QueryLogRepository queryLogRepository;
+    private final DrugExtractionService drugExtractionService;
 
     /**
      * 药品问答接口
@@ -35,7 +38,19 @@ public class DrugQAController {
     @PostMapping("/query")
     public QueryResponse query(@Valid @RequestBody QueryRequest request) {
         long startTime = System.currentTimeMillis();
-        String cacheKey = cacheService.generateKey(request.getQuestion(), request.getDrugName());
+
+        // 提取并标准化药品名称
+        var extractionResult = drugExtractionService.extract(request.getQuestion(), request.getSessionId());
+
+        if (extractionResult.isNeedsConfirmation() && extractionResult.getCandidates() != null
+                && !extractionResult.getCandidates().isEmpty()) {
+            return buildAmbiguousResponse(extractionResult);
+        }
+
+        String normalizedDrugName = extractionResult.getNormalizedDrugName();
+        String effectiveDrugName = normalizedDrugName != null ? normalizedDrugName : request.getDrugName();
+
+        String cacheKey = cacheService.generateKey(request.getQuestion(), effectiveDrugName);
 
         // 检查缓存
         var cached = cacheService.get(cacheKey);
@@ -45,6 +60,7 @@ public class DrugQAController {
                     .data(QueryResponse.QueryData.builder()
                             .answer(cached.get().getAnswer())
                             .latencyMs(cached.get().getLatencyMs())
+                            .drugNameMetadata(buildDrugNameMetadata(extractionResult))
                             .build())
                     .message("cache hit")
                     .build();
@@ -53,9 +69,13 @@ public class DrugQAController {
             return response;
         }
 
+        // 获取对话历史
+        List<ConversationTurn> history = getConversationHistory(request.getSessionId());
+
         // RAG 检索增强
         int topK = request.getTopK() != null ? request.getTopK() : 3;
-        RagService.RagResult result = ragService.query(request.getQuestion(), request.getDrugName(), topK);
+        RagService.RagResult result = ragService.queryWithHistory(
+                request.getQuestion(), effectiveDrugName, topK, history);
 
         // 构建响应
         List<QueryResponse.Source> sources = result.getSources().stream()
@@ -82,6 +102,7 @@ public class DrugQAController {
                         .sources(sources)
                         .hallucinationCheck(check)
                         .latencyMs(result.getLatencyMs())
+                        .drugNameMetadata(buildDrugNameMetadata(extractionResult))
                         .build())
                 .build();
 
@@ -92,6 +113,63 @@ public class DrugQAController {
         logQuery(request, result.getAnswer(), check, System.currentTimeMillis() - startTime, false);
 
         return response;
+    }
+
+    private QueryResponse buildAmbiguousResponse(DrugExtractionService.ExtractionResult extractionResult) {
+        List<QueryResponse.DrugCandidate> candidates = extractionResult.getCandidates().stream()
+                .map(c -> QueryResponse.DrugCandidate.builder()
+                        .name(c.getStandardName())
+                        .similarity(c.getSimilarity())
+                        .matchType(c.getMatchType())
+                        .build())
+                .collect(Collectors.toList());
+
+        return QueryResponse.builder()
+                .code(2)
+                .message("drug_name_ambiguation")
+                .data(QueryResponse.QueryData.builder()
+                        .answer(null)
+                        .drugNameMetadata(QueryResponse.DrugNameMetadata.builder()
+                                .confirmedDrugName(null)
+                                .candidates(candidates)
+                                .build())
+                        .build())
+                .build();
+    }
+
+    private QueryResponse.DrugNameMetadata buildDrugNameMetadata(DrugExtractionService.ExtractionResult extractionResult) {
+        if (extractionResult == null) {
+            return null;
+        }
+
+        List<QueryResponse.DrugCandidate> candidates = null;
+        if (extractionResult.getCandidates() != null && !extractionResult.getCandidates().isEmpty()) {
+            candidates = extractionResult.getCandidates().stream()
+                    .map(c -> QueryResponse.DrugCandidate.builder()
+                            .name(c.getStandardName())
+                            .similarity(c.getSimilarity())
+                            .matchType(c.getMatchType())
+                            .build())
+                    .collect(Collectors.toList());
+        }
+
+        return QueryResponse.DrugNameMetadata.builder()
+                .confirmedDrugName(extractionResult.getNormalizedDrugName())
+                .matchType(extractionResult.isNeedsConfirmation() ? "AMBIGUOUS" : "EXACT")
+                .candidates(candidates)
+                .build();
+    }
+
+    private List<ConversationTurn> getConversationHistory(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return List.of();
+        }
+        List<QueryLog> logs = queryLogRepository.findBySessionId(sessionId);
+        return logs.stream()
+                .sorted((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()))
+                .limit(5)
+                .map(log -> new ConversationTurn(log.getQuestion(), log.getAnswer(), log.getCreatedAt()))
+                .collect(Collectors.toList());
     }
 
     /**

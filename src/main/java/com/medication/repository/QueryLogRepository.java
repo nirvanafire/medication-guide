@@ -14,6 +14,8 @@ public interface QueryLogRepository extends JpaRepository<QueryLog, Long> {
 
     List<QueryLog> findBySessionId(String sessionId);
 
+    List<QueryLog> findBySessionIdOrderByCreatedAtDesc(String sessionId);
+
     List<QueryLog> findByUserId(String userId);
 
     @Query("SELECT q FROM QueryLog q WHERE q.createdAt BETWEEN :start AND :end ORDER BY q.createdAt DESC")

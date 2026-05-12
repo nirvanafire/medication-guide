@@ -70,7 +70,8 @@ spring:
           database-name: ${MILVUS_DATABASE:medication_guide}
           collection-name: ${MILVUS_COLLECTION:drug_documents}
           initialize-schema: true
-          embedding-dimension: 2560
+#          embedding-dimension: 2560
+          embedding-dimension: 1024
           index-type: IVF_FLAT
           metric-type: COSINE
 

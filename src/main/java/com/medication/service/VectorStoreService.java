@@ -7,6 +7,7 @@ import com.medication.util.DocumentParser;
 import io.milvus.client.MilvusServiceClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -115,16 +116,21 @@ public class VectorStoreService {
      */
     public List<Document> searchSimilar(String query, String drugName, int topK, double threshold) {
         // 使用 Spring AI VectorStore 的默认搜索
-        SearchRequest searchRequest = SearchRequest.builder()
+        SearchRequest.Builder searachRequestBuilder = SearchRequest.builder()
                 .query(query)
                 .topK(topK)
-                .similarityThreshold(threshold)
-                .build();
+                .similarityThreshold(threshold);
 
+        if (!StringUtils.isBlank(drugName)) {
+            searachRequestBuilder.filterExpression("metadata[\"drug_name\"] == \"" + drugName + "\"");
+        }
+
+        SearchRequest searchRequest = searachRequestBuilder
+                .build();
         List<Document> results = vectorStore.similaritySearch(searchRequest);
 
         // 后置过滤：按 drugName 过滤结果
-        if (drugName != null && !drugName.isBlank()) {
+        if (!StringUtils.isBlank(drugName)) {
             final String targetDrugName = drugName;
             results = results.stream()
                     .filter(doc -> {
@@ -288,11 +294,16 @@ public class VectorStoreService {
     public List<HybridSearchResult> hybridSearchEnhanced(String query, String drugName,
                                                           int topK, RagConfig.HybridConfig config) {
         // 获取配置参数
-        int vectorLimit = config.getVectorSearchLimit();
-        int bm25Limit = config.getBm25SearchLimit();
+        int maxVectorLimit = config.getVectorSearchLimit();
+        int maxBm25Limit = config.getBm25SearchLimit();
         double similarityThreshold = ragConfig.getRetrieval().getSimilarityThreshold();
         double vectorWeight = config.getVectorWeight();
         double keywordWeight = config.getKeywordWeight();
+
+        // 基于 topK 计算实际检索上限（确保融合后有足够候选）
+        int effectiveTopK = Math.min(topK, maxVectorLimit);
+        int vectorLimit = Math.min(effectiveTopK * 3, maxVectorLimit);
+        int bm25Limit = Math.min(effectiveTopK * 5, maxBm25Limit);
 
         // 1. 向量语义检索通道
         List<Document> vectorResults = searchSimilar(query, drugName, vectorLimit, similarityThreshold);

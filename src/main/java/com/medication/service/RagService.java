@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.medication.config.RagConfig;
+import com.medication.dto.ConversationTurn;
 import com.medication.dto.HybridSearchResult;
 import com.medication.util.HallucinationDetector.HallucinationResult;
 
@@ -38,6 +39,13 @@ public class RagService {
      * 处理用户问题，返回基于药品说明书的回答
      */
     public RagResult query(String question, String drugName, int topK) {
+        return queryWithHistory(question, drugName, topK, null);
+    }
+
+    /**
+     * 处理用户问题，支持对话历史
+     */
+    public RagResult queryWithHistory(String question, String drugName, int topK, List<ConversationTurn> history) {
         long startTime = System.currentTimeMillis();
 
         // 1. 查询重写（将口语化问题改写为检索友好的形式）
@@ -63,7 +71,7 @@ public class RagService {
         String context = buildContext(relevantDocs);
 
         // 5. 构建 Prompt 并调用 LLM
-        String prompt = buildPrompt(context, question);
+        String prompt = buildPrompt(context, question, history);
         String answer = callLlm(prompt);
 
         // 6. 答案后处理
@@ -152,33 +160,54 @@ public class RagService {
         return context.toString();
     }
 
-    private String buildPrompt(String context, String question) {
+    private String buildPrompt(String context, String question, List<ConversationTurn> history) {
         String template = ragConfig.getPrompt().getTemplate();
+        Map<String, Object> params = new HashMap<>();
+        params.put("context", context);
+        params.put("question", question);
+        if (history != null && !history.isEmpty()) {
+            params.put("conversation_history", formatHistory(history));
+        }
+
         if (template != null && !template.isBlank()) {
             PromptTemplate promptTemplate = new PromptTemplate(template);
-            Map<String, Object> params = new HashMap<>();
-            params.put("context", context);
-            params.put("question", question);
             return promptTemplate.render(params);
         }
 
         // Default prompt
         return """
                 你是一位专业的药品说明书解读助手。
-                
+
                 【绝对规则】
                 1. 你只能根据提供的【药品说明书片段】回答问题
                 2. 如果片段中没有相关信息，回答"根据药品说明书，未找到相关信息"
                 3. 严禁自行编造、推断任何未在文档中出现的内容
                 4. 严禁使用预训练知识回答问题
                 5. 必须标注信息来源章节
-                
+
                 【药品说明书片段】
                 %s
-                
+
+                【对话历史】
+                %s
+
                 【用户问题】
                 %s
-                """.formatted(context, question);
+                """.formatted(context, formatHistory(history), question);
+    }
+
+    private String formatHistory(List<ConversationTurn> history) {
+        if (history == null || history.isEmpty()) {
+//            return "（无历史对话）";
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < history.size(); i++) {
+            ConversationTurn turn = history.get(i);
+            sb.append(String.format("【第%d轮】\n问：%s\n答：%s\n",
+                    i + 1, turn.getQuestion(), turn.getAnswer()));
+        }
+        return sb.toString();
     }
 
     private String callLlm(String prompt) {
